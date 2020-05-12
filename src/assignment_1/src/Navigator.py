@@ -27,7 +27,7 @@ class self():
         rospy.loginfo("To stop TurtleBot CTRL + C")
         rospy.on_shutdown(self.shutdown)
         self.cmd_vel=rospy.Publisher('/cmd_vel_mux/input/teleop',Twist,queue_size=10)
-        r = rospy.Rate(10)
+        #r = rospy.Rate(10)
         # Need to listen to the laser scanner
         #/camera
         rospy.Subscriber("/scan", LaserScan, self.OnLaserScan)
@@ -37,7 +37,7 @@ class self():
         while not rospy.is_shutdown():
             self.ObstacleAvoidance()
             self.cmd_vel.publish(self.move_cmd)
-            r.sleep()
+            rospy.sleep(0.2)
 
 
     def OnLaserScan(self, data):
@@ -69,29 +69,23 @@ class self():
         temp = 0
         count = 0
         processedRangeTemp = []
-        
+        #rospy.loginfo( data[250:350])
         for i in reversed(unprocessedData): 
             count += 1
             if count < 50:
-                if(i >= 0 or i <= 0):
-                    temp += int(i)
+                if i >= 0 or i <= 0:
+                    temp += int(i*100) 
                 else:
-                    temp += 15
+                    temp += 6 * 100
             else:
                 count = 0
-                processedElement = temp
+                processedElement = temp / 100
                 processedRangeTemp.append(processedElement)
                 temp = 0
         
         self.processedRange = processedRangeTemp
+        #rospy.loginfo(self.processedRange)
 
-        #element = 0
-        #for i in self.processedRange:
-            #rospy.loginfo("%f is %f", element, i)
-            #element += 1
-
-        #middle_value = len(unprocessedData) /2
-        #rospy.loginfo(data[310:330])
             
     def ObstacleAvoidance(self):
 
@@ -103,57 +97,70 @@ class self():
         
         #making sure that the data has been processed initially
         if self.bump == 1:
-            self.move_cmd.linear.x = -0.5
-            self.move_cmd.angular.z = -3
+            self.move_cmd.linear.x = -2
+            self.move_cmd.angular.z = -2
             self.bump = 0
         else:
             if middle_count > 0:
-                middle_value = self.processedRange[middle_count]
+                middle_value1 = self.processedRange[middle_count-1]
+                middle_value2 = self.processedRange[middle_count]
                 first_value = self.processedRange[0]
                 last_value = self.processedRange[max_value - 1]
 
                 rospy.loginfo("first value : %f", first_value)
-                rospy.loginfo("middle value : %f", middle_value)
+                rospy.loginfo("middle value 1 : %f", middle_value1)
+                rospy.loginfo("middle value 2 : %f", middle_value2)
                 rospy.loginfo("last value : %f", last_value)
-                if first_value > 30 and middle_value > 30 and last_value > 30:
+                #going straight
+                if first_value > 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value > 30:
                     rospy.loginfo("state 1")
                     self.move_cmd.linear.x = 0.2
                     self.move_cmd.angular.z = 0
-                elif first_value > 30 and middle_value < 30 and last_value > 30:
-                    rospy.loginfo("state 1")
+                #obstacle in front of robot
+                elif first_value > 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value > 30:
+                    rospy.loginfo("state 2")
+                    #if left has more space
                     if first_value > last_value:
                         self.move_cmd.linear.x = 0
                         self.move_cmd.angular.z = 0.7
+                    #if right has more space
                     else:
                         self.move_cmd.linear.x = 0
                         self.move_cmd.angular.z = -0.7
-                elif first_value > 30 and middle_value > 30 and last_value < 30:
+                #obstacle on the right
+                elif first_value > 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value <= 30:
                     rospy.loginfo("state 3")
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -0.7
-                elif first_value < 30 and middle_value > 30 and last_value > 30:
+                    self.move_cmd.angular.z = 2
+                #obstacle on the left
+                elif first_value <= 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value > 30:
                     rospy.loginfo("state 4")
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = 0.7
-                elif first_value < 30 and middle_value < 30 and last_value > 30:
+                    self.move_cmd.angular.z = -2
+                #obstacle left and middle
+                elif first_value <= 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value > 30:
                     rospy.loginfo("state 5")
-                    self.move_cmd.linear.x = -1
-                    self.move_cmd.angular.z = -5
-                elif first_value > 30 and middle_value < 30 and last_value < 30:
+                    self.move_cmd.linear.x = 0
+                    self.move_cmd.angular.z = 2
+                #obstacle middle and right
+                elif first_value > 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value <= 30:
                     rospy.loginfo("state 6")
-                    self.move_cmd.linear.x = -1
-                    self.move_cmd.angular.z = 5
-                elif first_value < 30 and middle_value > 30 and last_value < 30:
+                    self.move_cmd.linear.x = 0
+                    self.move_cmd.angular.z = -2
+                #obstacle left and right
+                elif first_value <= 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value <= 30:
                     rospy.loginfo("state 7")
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -0.3
-                elif first_value < 30 and middle_value < 30 and last_value < 30:
+                    self.move_cmd.angular.z = 2
+                #obstacle left middle and right
+                elif first_value <= 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value <= 30:
                     rospy.loginfo("state 8")
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -1
+                    self.move_cmd.angular.z = 2
+                #any other case
                 else:
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -1
+                    self.move_cmd.angular.z = -2
             
 
     def shutdown(self):
