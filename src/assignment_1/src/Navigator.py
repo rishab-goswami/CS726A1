@@ -1,124 +1,76 @@
 #! /usr/bin/env python
-from __future__ import print_function
-import sys
 import rospy
-import cv2
-from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import LaserScan
-from kobuki_msgs.msg import BumperEvent
+from assignment_1.msg import laser
+from assignment_1.msg import bumper
+from Photo import TakePhoto
 
-#assumption: the height of any obstacle isn't lower than the cinder block
+class MovementNode():
 
-class self():
-
-    # Move to a class variable so the callback can modify it
     move_cmd = Twist()
-    processedRange = []
-    check_left_first = 0
-    check_left_first = 0
     bump = 0
+    processedRange = []
+    count = 0
 
     def __init__(self):
-        # Initialise everything - see the lab manual for descriptions
         rospy.init_node('self', anonymous=False)
         rospy.loginfo("To stop TurtleBot CTRL + C")
         rospy.on_shutdown(self.shutdown)
         self.cmd_vel=rospy.Publisher('/cmd_vel_mux/input/teleop',Twist,queue_size=10)
-        #r = rospy.Rate(10)
-        # Need to listen to the laser scanner
-        #/camera
-        rospy.Subscriber("/scan", LaserScan, self.OnLaserScan)
-        rospy.Subscriber("/mobile_base/events/bumper", BumperEvent, self.OnBumperCallback)
-        # Define the standard movement (forward at 0.2 m/s)
+        rospy.Subscriber('/topic1', laser, self.LaserData)
+        rospy.Subscriber('/topic2', bumper, self.BumperData)
         # As long as you haven't ctrl + c keeping doing...
         while not rospy.is_shutdown():
             self.ObstacleAvoidance()
             self.cmd_vel.publish(self.move_cmd)
             rospy.sleep(0.2)
 
+    def LaserData(self, data):
+        self.processedRange = data.processedRange
 
-    def OnLaserScan(self, data):
-        # Assuming the middle point is directly in front of the robot
-        self.ProcessRange(data.ranges)
-        
-    def OnBumperCallback(self, data):
-    # Use rosmsg info kobuki_msgs/BumperEvent to determine the fields for data
-        if data.state == 1:
-            self.bump = 1
-            rospy.loginfo(self.bump)
-            
+    def BumperData(self, data):
+        self.bump = data.bumper
 
-    def TakingPhoto(self):
-        camera = TakePhoto()
-        #Take a photo
+    def TakePicture(self):
+        self.count += 1
+        camera = TakePhoto(self.count)
 
-        #Use '_image_title' parameter from command line
-        #Default value is 'photo.jpg'
+        # Take a photo
+
+        # Use '_image_title' parameter from command line
+        # Default value is 'photo.jpg'
         img_title = rospy.get_param('~image_title', 'photo.jpg')
 
         if camera.take_picture(img_title):
-            rospy.loginfo("Saved image " + img_title)
+            rospy.loginfo("Saved image " + str(self.count) + img_title)
         else:
             rospy.loginfo("No images received")
 
-    def ProcessRange(self, data):
-        unprocessedData = data[20:620]
-        temp = 0
-        count = 0
-        processedRangeTemp = []
-        #rospy.loginfo( data[250:350])
-        for i in reversed(unprocessedData): 
-            count += 1
-            if count < 50:
-                if i >= 0 or i <= 0:
-                    temp += int(i*100) 
-                else:
-                    temp += 6 * 100
-            else:
-                count = 0
-                processedElement = temp / 100
-                processedRangeTemp.append(processedElement)
-                temp = 0
-        
-        self.processedRange = processedRangeTemp
-        #rospy.loginfo(self.processedRange)
+        # Sleep to give the last log messages time to be sent
 
             
     def ObstacleAvoidance(self):
-
-        #positive angular value is anticlockwise and negative is clockwise
-        # Assumption only take photo when the obstacle is detected by the middle 
-        # 5 ranges.
-        max_value = len(self.processedRange)
-        middle_count = max_value / 2
-        
-        #making sure that the data has been processed initially
         if self.bump == 1:
+            self.TakePicture()
             self.move_cmd.linear.x = -2
             self.move_cmd.angular.z = -2
             self.bump = 0
         else:
-            if middle_count > 0:
+            max_value = len(self.processedRange)
+            middle_count = max_value / 2
+            #making sure there are values in the processedRange list
+            if max_value > 0:
                 middle_value1 = self.processedRange[middle_count-1]
                 middle_value2 = self.processedRange[middle_count]
                 first_value = self.processedRange[0]
                 last_value = self.processedRange[max_value - 1]
-
-                rospy.loginfo("first value : %f", first_value)
-                rospy.loginfo("middle value 1 : %f", middle_value1)
-                rospy.loginfo("middle value 2 : %f", middle_value2)
-                rospy.loginfo("last value : %f", last_value)
                 #going straight
                 if first_value > 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value > 30:
-                    rospy.loginfo("state 1")
                     self.move_cmd.linear.x = 0.2
                     self.move_cmd.angular.z = 0
                 #obstacle in front of robot
                 elif first_value > 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value > 30:
-                    rospy.loginfo("state 2")
+                    self.TakePicture()
                     #if left has more space
                     if first_value > last_value:
                         self.move_cmd.linear.x = 0
@@ -129,38 +81,39 @@ class self():
                         self.move_cmd.angular.z = -0.7
                 #obstacle on the right
                 elif first_value > 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value <= 30:
-                    rospy.loginfo("state 3")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = 2
+                    self.move_cmd.angular.z = 3
                 #obstacle on the left
                 elif first_value <= 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value > 30:
-                    rospy.loginfo("state 4")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -2
+                    self.move_cmd.angular.z = -3
                 #obstacle left and middle
                 elif first_value <= 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value > 30:
-                    rospy.loginfo("state 5")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = 2
+                    self.move_cmd.angular.z = 3
                 #obstacle middle and right
                 elif first_value > 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value <= 30:
-                    rospy.loginfo("state 6")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -2
+                    self.move_cmd.angular.z = -3
                 #obstacle left and right
                 elif first_value <= 30 and (middle_value1 > 55 or middle_value2 > 55) and last_value <= 30:
-                    rospy.loginfo("state 7")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = 2
+                    self.move_cmd.angular.z = 3
                 #obstacle left middle and right
                 elif first_value <= 30 and (middle_value1 <= 55 or middle_value2 <= 55) and last_value <= 30:
-                    rospy.loginfo("state 8")
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = 2
+                    self.move_cmd.angular.z = 3
                 #any other case
                 else:
+                    self.TakePicture()
                     self.move_cmd.linear.x = 0
-                    self.move_cmd.angular.z = -2
+                    self.move_cmd.angular.z = -3
             
 
     def shutdown(self):
@@ -174,38 +127,6 @@ class self():
         # down the script
         rospy.sleep(1)
 
-class TakePhoto:
-    def __init__(self):
 
-        self.bridge = CvBridge()
-        self.image_received = False
-
-        # Connect image topic
-        img_topic = "/camera/rgb/image_raw"
-        self.image_sub = rospy.Subscriber(img_topic, Image, self.callback)
-
-        # Allow up to one second to connection
-        rospy.sleep(1)
-
-    def callback(self, data):
-
-        # Convert image to OpenCV format
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-
-        self.image_received = True
-        self.image = cv_image
-
-    def take_picture(self, img_title):
-        if self.image_received:
-            # Save an image
-            cv2.imwrite(img_title, self.image)
-            return True
-        else:
-            return False
- 
 if __name__ == '__main__':
-    self()
-    rospy.init_node('take_photo', anonymous=False)
+    MovementNode()
