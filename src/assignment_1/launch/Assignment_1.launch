@@ -1,12 +1,6 @@
 <launch>
  <node pkg="assignment_1" type="Navigator.py" name="Navigator" cwd="node" output="screen"/>
- <node name="depthimage_to_laserscan" pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" >
-  <remap from= "image" to="/camera/depth/image_raw"/>
-  <remap from="scan" to="/camera/scan"/>
-  <rosparam>
-   range_min: 0.46
-   range_max: 10.0
-   scan_height: 130
-  </rosparam>
- </node>
+ <node pkg="assignment_1" type="LaserScanner.py" name="LaserScanner" cwd="node" output="screen"/>
+ <node pkg="assignment_1" type="Bumper.py" name="Bumper" cwd="node" output="screen"/>
+ <node pkg="assignment_1" type="Photo.py" name="Photo" cwd="node" output="screen"/>
 </launch>

@@ -1,0 +1,8 @@
+prefix=/home/rishab/Documents/CS726A1/devel
+
+Name: assignment_1
+Description: Description of assignment_1
+Version: 0.0.0
+Cflags: -I/home/rishab/Documents/CS726A1/devel/include
+Libs: -L${prefix}/lib 
+Requires: message_runtime rospy std_msgs
